@@ -88,47 +88,10 @@ void displayRedStripe(String text, uint16_t fgcolor, uint16_t bgcolor) {
     tft.println(text);
 }
 
-void displayError(String txt)   { 
-  #ifndef HAS_SCREEN
-    Serial.println("ERR: " + txt);
-    return;
-  #endif
-  displayRedStripe(txt);
-  delay(200);
-  while(!checkAnyKeyPress()) delay(100);
-}
-
-void displayWarning(String txt) {
-  #ifndef HAS_SCREEN
-    Serial.println("WARN: " + txt);
-    return;
-  #endif
-  displayRedStripe(txt, TFT_BLACK,TFT_YELLOW);
-  delay(200);
-  while(!checkAnyKeyPress()) delay(100);
-}
-
-void displayInfo(String txt)    {
-  #ifndef HAS_SCREEN
-    Serial.println("INFO: " + txt);
-    return;
-  #endif
-  // todo: add newlines to txt if too long
-  displayRedStripe(txt, TFT_WHITE, TFT_BLUE);
-  delay(200);
-  while(!checkAnyKeyPress()) delay(100);
-}
-
-void displaySuccess(String txt) {
-  #ifndef HAS_SCREEN
-    Serial.println("SUCCESS: " + txt);
-    return;
-  #endif
-  // todo: add newlines to txt if too long
-  displayRedStripe(txt, TFT_WHITE, TFT_DARKGREEN);
-  delay(200);
-  while(!checkAnyKeyPress()) delay(100);
-}
+void displayError(String txt)   { displayRedStripe(txt); }
+void displayWarning(String txt) { displayRedStripe(txt, TFT_BLACK,TFT_YELLOW); }
+void displayInfo(String txt)    { displayRedStripe(txt, TFT_WHITE, TFT_BLUE); }
+void displaySuccess(String txt) { displayRedStripe(txt, TFT_WHITE, TFT_DARKGREEN); }
 
 void setPadCursor(int16_t padx, int16_t pady) {
   for (int y=0; y<pady; y++) tft.println();
@@ -250,6 +213,11 @@ void padprintln(double n, int digits, int16_t padx) {
 **  Function: loopOptions
 **  Where you choose among the options in menu
 **********************************************************************/
+extern unsigned long press_events[8];
+extern int current_event_index;
+extern int last_event;
+
+
 int loopOptions(std::vector<Option>& options, bool bright, bool submenu, String subText,int index){
   bool redraw = true;
   int menuSize = options.size();
@@ -259,6 +227,32 @@ int loopOptions(std::vector<Option>& options, bool bright, bool submenu, String 
   if(index>0) tft.fillRoundRect(WIDTH*0.10,HEIGHT/2-menuSize*(FM*8+4)/2 -5,WIDTH*0.8,(FM*8+4)*menuSize+10,5,BGCOLOR);
   if(index>=options.size()) index=0;
   while(1){
+    #if defined(ATOMS3)
+    M5.update();
+    if(M5.BtnA.isPressed() && !last_event) {
+        press_events[current_event_index] = millis();
+        last_event = 1;
+        current_event_index++;
+    }
+
+    if(!M5.BtnA.isPressed() && last_event) {
+        press_events[current_event_index] = millis();
+        last_event = 0;
+        current_event_index++;
+    }
+
+    if(current_event_index == 8) {
+        for(int i = 0; i < 7; i++) {
+            press_events[i] = press_events[i+1];
+        }
+
+        current_event_index = 7;
+        press_events[current_event_index] = 0;
+    }
+
+    #endif
+
+
     if (redraw) {
       if(submenu) drawSubmenu(index, options, subText);
       else drawOptions(index, options, FGCOLOR, BGCOLOR);
@@ -608,8 +602,8 @@ void drawBLESmall(int x, int y) {
   tft.fillRect(x,y,17,17,BGCOLOR);
   tft.drawWideLine(8+x, 8+y, 4+x, 5+y, 2, FGCOLOR,BGCOLOR);
   tft.drawWideLine(8+x, 8+y, 4+x,13+y, 2, FGCOLOR,BGCOLOR);
-  tft.drawTriangle(8+x, 8+y, 8+x, 0+y,13+x,4+y,FGCOLOR);
-  tft.drawTriangle(8+x, 8+y, 8+x,16+y,13+x,12+y,FGCOLOR);
+  tft.drawTriangle(8+x, 8+y, 8+x, 0+y,13,4,FGCOLOR);
+  tft.drawTriangle(8+x, 8+y, 8+x,16+y,13,12,FGCOLOR);
 }
 
 void drawBLE_beacon(int x, int y, uint16_t color) {

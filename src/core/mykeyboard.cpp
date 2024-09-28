@@ -75,6 +75,9 @@ bool menuPress(int bot) {
 #endif
 /* Verifies Upper Btn to go to previous item */
 
+int last_press_duration = 0;
+
+
 bool checkNextPress(){
   #if defined (CARDPUTER)
     Keyboard.update();
@@ -82,6 +85,9 @@ bool checkNextPress(){
   #elif defined(CORE2) || defined(CORE)
     M5.update();
     if(M5.BtnC.isPressed())
+  #elif defined(ATOMS3)
+    M5.update();
+    if(false)//M5.BtnA.wasPressed() && !M5.BtnA.pressedFor(1000))
   #elif defined(M5STACK)
     M5.update();
     if(menuPress(NEXT))
@@ -102,8 +108,39 @@ bool checkNextPress(){
   else return false;
 }
 
+
+//extern double theta;
+//extern double phi;
+
+extern int current_event_index;
+extern int last_event;
+
+bool check_double_press() {
+    log_d("%d %d %d", press_events[current_event_index - 1] - press_events[current_event_index - 2], press_events[current_event_index - 3] - press_events[current_event_index - 4], press_events[current_event_index - 2] - press_events[current_event_index - 3]);
+    return press_events[current_event_index - 1] - press_events[current_event_index - 2] < 500 && (millis() - press_events[current_event_index - 1] < 50)
+                && press_events[current_event_index - 3] - press_events[current_event_index - 4] < 500
+                && press_events[current_event_index - 2] - press_events[current_event_index - 3] < 500;
+}
+
+bool check_short_press() {
+    return press_events[current_event_index - 1] - press_events[current_event_index - 2] < 500 
+        && (millis() - press_events[current_event_index - 1] < 550)
+        && (millis() - press_events[current_event_index - 1] > 500);
+}
+
+bool check_long_press() {
+    return press_events[current_event_index - 1] - press_events[current_event_index - 2] > 1000 
+        && (millis() - press_events[current_event_index - 1] < 550)
+        && (millis() - press_events[current_event_index - 1] > 500);
+}
+
+
+
 /* Verifies Down Btn to go to next item */
 bool checkPrevPress() {
+  //log_d("theta:%f phi:%f", theta, phi);
+
+   
   #if defined(STICK_C_PLUS)
     if(axp192.GetBtnPress())
   #elif defined(CARDPUTER)
@@ -112,6 +149,9 @@ bool checkPrevPress() {
   #elif defined(CORE2) || defined(CORE)
     M5.update();
     if(M5.BtnA.isPressed())
+  #elif defined(ATOMS3)
+    M5.update();
+    if(true)
   #elif defined(M5STACK)
     M5.update();
     if(menuPress(PREV))
@@ -126,6 +166,17 @@ bool checkPrevPress() {
       delay(200);
       return false;
     }
+
+    #if defined(ATOMS3)
+    // if released
+    log_d("%d %d", press_events[current_event_index - 1] - press_events[current_event_index - 2], millis() - press_events[current_event_index - 1]);
+    if(!M5.BtnA.isPressed() && current_event_index >= 2) {
+        if(!check_double_press() && check_short_press()) {
+            return true;
+        }
+    }
+    return false;
+    #endif
     return true;
   }
 
@@ -144,9 +195,13 @@ bool checkSelPress(){
   #elif defined(CORE2) || defined(CORE)
     M5.update();
     if(M5.BtnB.isPressed())    
-  #elif defined(M5STACK)
+  #elif defined(M5STACK) && !defined(ATOMS3)
     M5.update();
     if(menuPress(SEL))
+  #elif defined(M5STACK) && defined(ATOMS3)
+    M5.update();
+    //if(M5.BtnA.wasPressed() && last_press_duration >= 1000)
+    if(true)
   #else
     if(digitalRead(SEL_BTN)==LOW)
   #endif
@@ -155,6 +210,20 @@ bool checkSelPress(){
       delay(200);
       return false;
     }
+    #if defined (ATOMS3)
+    // if released
+    //log_d("%d %d", press_events[current_event_index - 1] - press_events[current_event_index - 2], millis() - press_events[current_event_index - 1]);
+    if(!M5.BtnA.isPressed() && current_event_index >= 4) {
+        log_d("DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD");
+        if(check_double_press()) {
+            return true;
+        }
+    }
+    return false;
+
+
+    return false;
+    #endif
     return true;
   }
 
@@ -175,6 +244,8 @@ bool checkEscPress(){
   #elif defined(CORE2) || defined(CORE)
     M5.update();
     if(M5.BtnA.isPressed())
+  #elif defined(ATOMS3)
+    if(check_long_press())
   #elif defined(M5STACK)
     M5.update();
     if(menuPress(PREV))
@@ -182,6 +253,7 @@ bool checkEscPress(){
     if(digitalRead(UP_BTN)==LOW)
   #endif
   {
+    log_d("EEEEEEEEEEEEEEEEEEE %lu", press_events[current_event_index - 1] - press_events[current_event_index - 2]);
     if(wakeUpScreen()){
       delay(200);
       return false;
@@ -199,6 +271,9 @@ bool checkAnyKeyPress() {
   #elif defined(CORE2) || defined(CORE)
     M5.update();
     if(M5.BtnA.isPressed() || M5.BtnB.isPressed() || M5.BtnC.isPressed())    
+  #elif defined(ATOMS3)
+    M5.update();
+    return false;
   #elif defined(M5STACK)
     M5.update();
     if(menuPress(ALL))    
@@ -280,7 +355,6 @@ char checkLetterShortcutPress() {
 
 /* Starts keyboard to type data */
 String keyboard(String mytext, int maxSize, String msg) {
-  String _mytext = mytext;
 
   resetTftDisplay();
   bool caps=false;
@@ -527,14 +601,6 @@ String keyboard(String mytext, int maxSize, String msg) {
       wakeUpScreen();
       tft.setCursor(cX,cY);
       Keyboard_Class::KeysState status = Keyboard.keysState();
-
-      bool Fn = status.fn;
-      if(Fn && Keyboard.isKeyPressed('`')) { 
-        mytext = _mytext; // return the old name
-        returnToMenu=true;// try to stop all the code
-        break;
-      }
-
       for (auto i : status.word) {
         if(mytext.length()<maxSize) {
           mytext += i;

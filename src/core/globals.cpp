@@ -19,7 +19,6 @@ while(1) {
 }
 */
 
-
 void backToMenu() {
   returnToMenu=true;
 }

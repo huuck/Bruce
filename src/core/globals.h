@@ -30,6 +30,17 @@ extern char16_t FGCOLOR;
   extern Keyboard_Class Keyboard;
 #endif
 
+#if defined(ATOMS3)
+extern float accX;
+extern float accY;
+extern float accZ;
+extern unsigned long press_events[8];
+extern int last_event;
+extern double theta, last_theta;
+extern double phi, last_phi;
+extern double alpha;
+#endif
+
 #if defined(CORE2)
   #include <M5Core2.h>
 #elif defined(CORE)

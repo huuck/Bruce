@@ -7,7 +7,10 @@
 #include <string>
 #include "esp32-hal-psram.h"
 
-
+#if defined(ATOMS3)
+#include "core/wifi_common.h"
+#include "modules/others/webInterface.h"
+#endif
 
 MainMenu mainMenu;
 SPIClass sdcardSPI;
@@ -129,6 +132,8 @@ void setup_gpio() {
   #endif
   //if(RfModule==1)
   initCC1101once(&sdcardSPI); // Sets GPIO in the CC1101 lib
+  for(int i = 0; i < 8; i++)
+      press_events[i] = 0;
 }
 
 
@@ -247,11 +252,25 @@ void startup_sound() {
 #endif
 }
 
+float accX = 0;
+float accY = 0;
+float accZ = 0;
+
+double theta, last_theta = 0;
+double phi, last_phi     = 0;
+double alpha = 0.2;
+unsigned long press_events[8];
+int last_event;
+
 /*********************************************************************
 **  Function: setup
 **  Where the devices are started and variables set
 *********************************************************************/
 void setup() {
+  last_theta = 0;
+  last_phi     = 0;
+  alpha = 0.2;
+ 
   Serial.setRxBufferSize(SAFE_STACK_BUFFER_SIZE);  // Must be invoked before Serial.begin(). Default is 256 chars
   Serial.begin(115200);
 
@@ -282,19 +301,36 @@ void setup() {
 
   startup_sound();
 
-  #if ! defined(HAS_SCREEN)
+  #if ! defined(HAS_SCREEN) || defined(ATOMS3)
     // start a task to handle serial commands while the webui is running
     startSerialCommandsHandlerTask();
   #endif
 
   delay(200);
   previousMillis = millis();
+  last_event = 0;
 }
 
 /**********************************************************************
 **  Function: loop
 **  Main loop
 **********************************************************************/
+
+extern double theta, last_theta;
+extern double phi, last_phi;
+extern double alpha;
+int current_event_index;
+
+void print_event_queue() {
+    char buff[256] = "", *pos = buff;
+    for(int i = 0; i < 8; i++) {
+        if(press_events[i]) {
+            pos += sprintf(pos, " %lu", press_events[i]);
+        }
+    }
+    log_d("%s", buff);
+}
+
 #if defined(HAS_SCREEN)
 void loop() {
   #if defined(HAS_RTC)
@@ -303,6 +339,17 @@ void loop() {
   bool redraw = true;
   long clock_update=0;
   mainMenu.begin();
+
+  #if defined(ATOMS3)
+    /*
+  if(!wifiConnected) {
+    Serial.println("wifiConnect");
+    wifiConnect("",0,true);  // TODO: read mode from settings file
+  }
+  Serial.println("startWebUi");
+  startWebUi(true);  // MEMO: will quit when checkEscPress
+  */
+  #endif
 
   // Interpreter must be ran in the loop() function, otherwise it breaks
   // called by 'stack canary watchpoint triggered (loopTask)'
@@ -319,6 +366,53 @@ void loop() {
 
 
   while(1){
+    
+    M5.update();
+    if(M5.BtnA.isPressed() && !last_event) {
+        press_events[current_event_index] = millis();
+        last_event = 1;
+        current_event_index++;
+    }
+
+    if(!M5.BtnA.isPressed() && last_event) {
+        press_events[current_event_index] = millis();
+        last_event = 0;
+        current_event_index++;
+    }
+
+    if(current_event_index == 8) {
+        for(int i = 0; i < 7; i++) {
+            press_events[i] = press_events[i+1];
+        }
+
+        current_event_index = 7;
+        press_events[current_event_index] = 0;
+    }
+
+    print_event_queue();
+
+
+    auto imu_update = M5.Imu.update();
+  
+    M5.Imu.getAccelData(&accX, &accY, &accZ);
+    // M5.MPU6886.getAccelData(&accX, &accY, &accZ);
+    if ((accX < 1) && (accX > -1)) {
+        theta = asin(-accX) * 57.295;
+    }
+    if (accZ != 0) {
+        phi = atan(accY / accZ) * 57.295;
+    }
+
+    theta = alpha * theta + (1 - alpha) * last_theta;
+    phi   = alpha * phi + (1 - alpha) * last_phi;
+        
+    //log_d("theta:%f phi:%f", theta, phi);
+
+    last_theta = theta;
+    last_phi   = phi;
+
+
+
     if(interpreter_start) goto END;
     if (returnToMenu) {
       returnToMenu = false;
@@ -355,6 +449,9 @@ void loop() {
       drawMainBorder(true);
       redraw=true;
     }
+    
+
+
     // update battery and clock once every 30 seconds
     // it was added to avoid delays in btns readings from Core and improves overall performance
     if(millis()-clock_update>30000) {
@@ -378,6 +475,8 @@ void loop() {
       clock_update=millis();
     }
   }
+
+  
   END:
   delay(1);
 }
